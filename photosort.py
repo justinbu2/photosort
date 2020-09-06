@@ -11,7 +11,7 @@ from time import ctime
 
 logger = logging.getLogger(__name__)
 
-LOGGING_CONF_NAME = "logging.conf"
+LOGGING_CONF_FILENAME = "logging.conf"
 SUPPORTED_GROUPINGS = {"year", "month", "date"}
 
 
@@ -34,7 +34,7 @@ def get_createdate_info(filename):
 def parse_args():
     parser = ArgumentParser("Utility to group and rename files by create date")
     parser.add_argument("-r", "--rootdir", help="Root directory containing photos to be relocated", default=os.getcwd())
-    parser.add_argument("-t", "--targetdir", help="Directory to which to relocate photos in --root", default=os.path.join(os.getcwd(), "_reorged"))
+    parser.add_argument("-t", "--targetdir", help="Directory to which to relocate photos in --root", default=os.path.join(os.getcwd(), "_sorted"))
     parser.add_argument("-g", "--groupby", help="Attribute by which to group photos in a single folder", choices=SUPPORTED_GROUPINGS, default="year")
     parser.add_argument("--rename", help="Specify whether to rename files to YYYY-MM-DD[_idx], preserving file extensions", action="store_true", default=False)
     return parser.parse_args()
@@ -133,7 +133,7 @@ def main():
 
 if __name__ == "__main__":
     logger.setLevel(logging.INFO)
-    log_config_path = os.path.join(pathlib.Path(__file__).parent.absolute(), LOGGING_CONF_NAME)
+    log_config_path = os.path.join(pathlib.Path(__file__).parent.absolute(), LOGGING_CONF_FILENAME)
     logging.config.fileConfig(log_config_path, disable_existing_loggers=False)
     exitcode = main()
     sys.exit(exitcode)
