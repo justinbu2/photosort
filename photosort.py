@@ -15,22 +15,6 @@ LOGGING_CONF_FILENAME = "logging.conf"
 SUPPORTED_GROUPINGS = {"year", "month", "date"}
 
 
-def get_createdate_info(filename):
-    """
-    Returns the year, month, and day of the create date of
-    `filename`.
-    N.B. Results are integer strings (month and day are padded)
-    """
-    stat = os.stat(filename)
-    create_date = stat.st_birthtime
-    create_date_ctime = ctime(create_date)
-    _, month, day, _, year = create_date_ctime.split()
-    datetime_obj = datetime.strptime(f"{year} {month} {day}", "%Y %b %d")
-    year = str(datetime_obj.year)
-    month = str(datetime_obj.month).rjust(2, "0")
-    day = str(datetime_obj.day).rjust(2, "0")
-    return year, month, day
-
 def parse_args():
     parser = ArgumentParser("Utility to group and rename files by create date")
     parser.add_argument("-r", "--rootdir", help="Root directory containing photos to be relocated", default=os.getcwd())
@@ -53,12 +37,29 @@ def validate_filenames(rootdir):
         message += "\n".join(error_filepaths)
         raise Exception(message)
 
+def get_createdate_info(filename):
+    """
+    Returns the year, month, and day of the create date of
+    `filename`.
+    N.B. Results are integer strings (month and day are padded)
+    """
+    stat = os.stat(filename)
+    create_date = stat.st_birthtime
+    create_date_ctime = ctime(create_date)
+    _, month, day, _, year = create_date_ctime.split()
+    datetime_obj = datetime.strptime(f"{year} {month} {day}", "%Y %b %d")
+    year = str(datetime_obj.year)
+    month = str(datetime_obj.month).rjust(2, "0")
+    day = str(datetime_obj.day).rjust(2, "0")
+    return year, month, day
+
 def construct_groups(rootdir, groupby):
     # filenames are guaranteed to be distinct because
     # we do not recursively search through rootdir
     groupsdict = defaultdict(list)
     for filename in os.listdir(rootdir):
-        year, month, day = get_createdate_info(filename)
+        filepath = os.path.join(rootdir, filename)
+        year, month, day = get_createdate_info(filepath)
         if groupby == "year":
             groupname = year
         elif groupby == "month":
@@ -79,6 +80,8 @@ def copy_files(groupsdict, rootdir, targetdir):
                 os.makedirs(targetgroup_dir)
             targetpath = os.path.join(targetgroup_dir, filename)
             filepath = os.path.join(rootdir, filename)
+            if os.path.isdir(filepath):
+                continue
             shutil.copyfile(filepath, targetpath)
             shutil.copystat(filepath, targetpath)
 
