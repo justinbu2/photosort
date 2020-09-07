@@ -1,12 +1,13 @@
 import logging
 import logging.config
+import math
 import os
 import pathlib
 import shutil
 import sys
 from argparse import ArgumentParser
-from collections import Counter, defaultdict
-from datetime import date, datetime
+from collections import Counter, OrderedDict, defaultdict
+from datetime import datetime
 from time import ctime
 
 logger = logging.getLogger(__name__)
@@ -99,11 +100,18 @@ def rename_files(targetdir, datefmt):
     for groupname in os.listdir(targetdir):
         groupdir = os.path.join(targetdir, groupname)
 
-        # construct mapping of each file name their extensions
-        filename_exts = defaultdict(list)
+        # sort file iteration order by create datetime
+        groupdir_files = [os.path.join(groupdir, f) for f in os.listdir(groupdir)]
+        groupdir_files = sorted(groupdir_files, key=os.path.getmtime)
+        groupdir_files = [fpath.split(os.path.sep)[-1] for fpath in groupdir_files]
+
+        # construct mapping of filename -> extensions
+        filename_exts = OrderedDict()
         for filename in os.listdir(groupdir):
             file_ext = filename.split(".")[-1]
             filename_no_ext = filename.replace(f".{file_ext}", "")
+            if filename_no_ext not in filename_exts:
+                filename_exts[filename_no_ext] = []
             filename_exts[filename_no_ext].append(file_ext)
 
         # construct per-date file counts by extension-agnostic file name
@@ -118,6 +126,7 @@ def rename_files(targetdir, datefmt):
 
         # apply rename on filesystem
         seen_dates_counter = Counter()
+        tmp_targetpaths = []
         for filename_no_ext, file_exts in filename_exts.items():
             for i, file_ext in enumerate(file_exts):
                 filename = f"{filename_no_ext}.{file_ext}"
@@ -126,17 +135,30 @@ def rename_files(targetdir, datefmt):
                 createdate = get_createdate(cur_filepath)
                 new_filename = createdate.strftime(datefmt)
                 createdate_dateinfo = get_year_month_day(createdate)
-                if date_counts[createdate_dateinfo] > 1:
+                createdate_count = date_counts[createdate_dateinfo]
+                if createdate_count > 1:
                     # we only append idx if there is >1 file with same create date
                     if i == 0:
                         seen_dates_counter[createdate_dateinfo] += 1
-                    idx = seen_dates_counter[createdate_dateinfo]
+                    createdate_count_numdigits = int(math.log10(createdate_count)) + 1
+                    idx = str(seen_dates_counter[createdate_dateinfo]).rjust(createdate_count_numdigits, "0")
                     new_filename = f"{new_filename}_{idx}"
                 file_ext = filename.split(".")[-1]
                 new_filename_w_ext = f"{new_filename}.{file_ext}"
 
                 new_targetpath = os.path.join(groupdir, new_filename_w_ext)
-                os.rename(cur_filepath, new_targetpath)
+                new_tmp_targetpath = f"{new_targetpath}.tmp" # to prevent file loss, described below
+                os.rename(cur_filepath, new_tmp_targetpath)
+                tmp_targetpaths.append((new_tmp_targetpath, new_targetpath))
+
+        # we rename once more from the tmp target path to the actual target path
+        # this is to address potential file deletion issues with reshuffling
+        # of the file names
+        # eg. (DATE1_1.jpg -> DATE2.jpg, DATE2.jpg -> DATE1.jpg) will result in
+        # only 1 file
+        for targetpath_pair in tmp_targetpaths:
+            tmp_targetpath, act_targetpath = targetpath_pair
+            os.rename(tmp_targetpath, act_targetpath)
 
 def main():
     opts = parse_args()
