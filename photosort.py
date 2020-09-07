@@ -86,28 +86,52 @@ def copy_files(groupsdict, rootdir, targetdir):
             shutil.copystat(filepath, targetpath)
 
 def rename_files(targetdir):
+    """
+    Apple "Live" photos will have 1 jpeg and 1 mov for each photo. They
+    share a file name, but have different extensions. Renamed
+    files reflect the same naming convention.
+    """
     for groupname in os.listdir(targetdir):
         groupdir = os.path.join(targetdir, groupname)
-        # construct counter. we only append idx if there are >1 file with same create date
-        file_dates = [get_createdate_info(os.path.join(groupdir, filename)) for filename in os.listdir(groupdir)]
-        date_counts = Counter(file_dates)
-        seen_dates_counter = defaultdict(int)
-        for filename in os.listdir(groupdir):
-            # rename each file to its create date
-            cur_filepath = os.path.join(groupdir, filename)
-            createdate_info = get_createdate_info(cur_filepath)
-            year, month, day = createdate_info
-            create_date_str = "-".join([year, month, day])
-            new_filename = create_date_str
-            if date_counts[createdate_info] > 1:
-                seen_dates_counter[createdate_info] += 1
-                idx = seen_dates_counter[createdate_info]
-                new_filename = f"{new_filename}_{idx}"
-            file_ext = filename.split(".")[-1]
-            new_filename_w_ext = f"{new_filename}.{file_ext}"
 
-            new_targetpath = os.path.join(groupdir, new_filename_w_ext)
-            os.rename(cur_filepath, new_targetpath)
+        # construct mapping of each file name their extensions
+        filename_exts = defaultdict(list)
+        for filename in os.listdir(groupdir):
+            file_ext = filename.split(".")[-1]
+            filename_no_ext = filename.replace(f".{file_ext}", "")
+            filename_exts[filename_no_ext].append(file_ext)
+
+        # construct per-date file counts by extension-agnostic file name
+        date_counts = Counter()
+        for filename_no_ext, file_exts in filename_exts.items():
+            # assign the indices here
+            cur_filename = f"{filename_no_ext}.{file_exts[0]}"
+            cur_filepath = os.path.join(groupdir, cur_filename)
+            createdate_info = get_createdate_info(cur_filepath)
+            date_counts[createdate_info] += 1
+
+        # apply rename on filesystem
+        seen_dates_counter = Counter()
+        for filename_no_ext, file_exts in filename_exts.items():
+            for i, file_ext in enumerate(file_exts):
+                filename = f"{filename_no_ext}.{file_ext}"
+                # rename each file to its create date
+                cur_filepath = os.path.join(groupdir, filename)
+                createdate_info = get_createdate_info(cur_filepath)
+                year, month, day = createdate_info
+                create_date_str = "-".join([year, month, day])
+                new_filename = create_date_str
+                if date_counts[createdate_info] > 1:
+                    # we only append idx if there is >1 file with same create date
+                    if i == 0:
+                        seen_dates_counter[createdate_info] += 1
+                    idx = seen_dates_counter[createdate_info]
+                    new_filename = f"{new_filename}_{idx}"
+                file_ext = filename.split(".")[-1]
+                new_filename_w_ext = f"{new_filename}.{file_ext}"
+
+                new_targetpath = os.path.join(groupdir, new_filename_w_ext)
+                os.rename(cur_filepath, new_targetpath)
 
 def main():
     opts = parse_args()
