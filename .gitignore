@@ -1,5 +1,9 @@
-# Output folder of photosort
+# Default output folder of photosort
 _sorted/
+
+# Other files
+snippets/
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
