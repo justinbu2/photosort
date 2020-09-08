@@ -158,8 +158,9 @@ def copy_files(copy_dict):
     return pre_existing_files
 
 def roll_back(copy_dict, pre_existing_files):
+    pre_existing_target_files = {f[1] for f in pre_existing_files}
     for target_path in copy_dict.values():
-        if not os.path.exists(target_path) or target_path in pre_existing_files:
+        if not os.path.exists(target_path) or target_path in pre_existing_target_files:
             continue
         os.remove(target_path)
 
