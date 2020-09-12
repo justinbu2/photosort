@@ -3,6 +3,7 @@ import logging.config
 import math
 import os
 import pathlib
+import re
 import shutil
 import sys
 from argparse import ArgumentParser
@@ -14,13 +15,14 @@ logger = logging.getLogger(__name__)
 
 LOGGING_CONF_FILENAME = "logging.conf"
 SUPPORTED_GROUPINGS = {"year", "month", "date"}
-IGNORED_FILENAMES = {".DS_Store"}
+IGNORED_FILENAMES_REGEX = r"(\.DS_Store)|(\._.*)"
+DEFAULT_DEST_DIRNAME = "_sorted"
 
 
 def parse_args():
-    parser = ArgumentParser("Utility to group and rename files by create date")
+    parser = ArgumentParser("Utility to group and rename files by create date. Note: file stats may not be preserved when copying on external disks.")
     parser.add_argument("-r", "--rootdir", help="Root directory containing photos to be relocated", default=os.getcwd())
-    parser.add_argument("-t", "--targetdir", help="Directory to which to relocate photos in --root", default=os.path.join(os.getcwd(), "_sorted"))
+    parser.add_argument("-t", "--targetdir", help=f"Directory to which to relocate photos from --root. Defaults to `--root`/{DEFAULT_DEST_DIRNAME}")
     parser.add_argument("-g", "--groupby", help="Attribute by which to group photos in a single folder", choices=SUPPORTED_GROUPINGS, default="year")
     parser.add_argument("--rename", help="Specify whether to rename files to <date_fmt>[_idx], preserving file extensions", action="store_true", default=False)
     parser.add_argument("-df", "--dateformat", help="Format of the date portion of resulting file names. Follows datetime.date.strftime convention", default="%Y%m%d")
@@ -48,7 +50,7 @@ def get_files_createdates(rootdir):
     rootdir_filepaths = [
         os.path.join(rootdir, f)
         for f in os.listdir(rootdir)
-        if not os.path.isdir(f) and f not in IGNORED_FILENAMES]
+        if not os.path.isdir(os.path.join(rootdir, f)) and not re.match(IGNORED_FILENAMES_REGEX, f)]
     filepath_createdate_pairs = [(filepath, get_createdate(filepath)) for filepath in rootdir_filepaths]
     return OrderedDict(sorted(filepath_createdate_pairs, key=lambda elem: elem[1]))
 
@@ -168,7 +170,10 @@ def roll_back(copy_dict, pre_existing_files):
 def main():
     opts = parse_args()
     rootdir = os.path.expanduser(opts.rootdir)
-    targetdir = os.path.expanduser(opts.targetdir)
+    if not opts.targetdir:
+        targetdir = os.path.join(rootdir, DEFAULT_DEST_DIRNAME)
+    else:
+        targetdir = os.path.expanduser(opts.targetdir)
 
     # validate file names
     validate_filenames(rootdir)
@@ -190,7 +195,7 @@ def main():
         copy_dict = rename_copy_dict(copy_dict, files_createdates_dict, opts.dateformat)
 
     # apply the copy of files over to targetdir
-    logger.info(f"Copying files from {opts.rootdir} to {opts.targetdir}...")
+    logger.info(f"Copying files from {rootdir} to {targetdir}...")
     pre_existing_files = copy_files(copy_dict)
     if pre_existing_files:
         fmtted_pre_existing_files = "\n".join([f"{pair[0]} -> {pair[1]}" for pair in pre_existing_files])
