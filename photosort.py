@@ -11,6 +11,8 @@ from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime
 from time import ctime
 
+import exifread
+
 logger = logging.getLogger(__name__)
 
 LOGGING_CONF_FILENAME = "logging.conf"
@@ -25,7 +27,7 @@ def parse_args():
     parser.add_argument("-t", "--targetdir", help=f"Directory to which to relocate photos from --root. Defaults to `--root`/{DEFAULT_DEST_DIRNAME}")
     parser.add_argument("-g", "--groupby", help="Attribute by which to group photos in a single folder", choices=SUPPORTED_GROUPINGS, default="year")
     parser.add_argument("--rename", help="Specify whether to rename files to <date_fmt>[_idx], preserving file extensions", action="store_true", default=False)
-    parser.add_argument("-df", "--dateformat", help="Format of the date portion of resulting file names. Follows datetime.date.strftime convention", default="%Y%m%d")
+    parser.add_argument("-df", "--dateformat", help="Format of the date portion of resulting file names. Follows datetime.date.strftime convention", default="%Y-%m-%d")
     return parser.parse_args()
 
 def validate_filenames(rootdir):
@@ -55,9 +57,20 @@ def get_files_createdates(rootdir):
     return OrderedDict(sorted(filepath_createdate_pairs, key=lambda elem: elem[1]))
 
 def get_createdate(filename):
-    epoch_createtime = get_epoch_createtime(filename)
-    _, month, day, time, year = epoch_createtime.split()
-    datetime_obj = datetime.strptime(f"{year} {month} {day} {time}", "%Y %b %d %H:%M:%S")
+    try:
+        with open(filename, "rb") as f:
+            exif_data = exifread.process_file(f)
+            og_datetime = str(exif_data["EXIF DateTimeOriginal"]) # %Y:%m%d hh:mm:ss
+            date, time = og_datetime.split(" ")
+            year, month, day = date.split(":")
+            datefmt = "%Y %m %d %H:%M:%S"
+    except KeyError as e:
+        logger.warning(f"Bad EXIF data: {filename} error: {e}")
+        # default method
+        epoch_createtime = get_epoch_createtime(filename)
+        _, month, day, time, year = epoch_createtime.split()
+        datefmt = "%Y %b %d %H:%M:%S"
+    datetime_obj = datetime.strptime(f"{year} {month} {day} {time}", datefmt)
     return datetime_obj
 
 def get_epoch_createtime(filename):
